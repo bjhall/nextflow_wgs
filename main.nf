@@ -652,9 +652,6 @@ process split_normalize {
 	publishDir "${OUTDIR}/vcf", mode: 'copy', overwrite: 'true'
 	tag "$group"
 
-	when:
-		params.annotate
-
 	input:
 		set group, id, file(vcf), file(idx) from combined_vcf.mix(vcf_choice)
 
@@ -707,6 +704,9 @@ process annotate_vep {
 	container = '/fs1/resources/containers/ensembl-vep_latest.sif'
 	cpus 54
 	tag "$group"
+	
+	when:
+		params.annotate
 
 	input:
 		set group, file(vcf) from split_vep
@@ -993,6 +993,9 @@ process peddy {
 	cpus 6
 	tag "$group"
 
+	when:
+		params.annotate
+
 	input:
 		file(ped) from ped_peddy
 		set group, file(vcf), file(idx) from vcf_peddy
@@ -1011,6 +1014,9 @@ process fastgnomad {
 	cpus 2
 	memory '16 GB'
 	tag "$group"
+	
+	when:
+		params.annotate
 
 	publishDir "${OUTDIR}/vcf", mode: 'copy', overwrite: 'true'
 
@@ -1351,6 +1357,9 @@ process annotsv {
 	tag "$group"
 	publishDir "${OUTDIR}/annotsv/", mode: 'copy', overwrite: 'true'
 
+	when:
+		params.annotate
+
 	input:
 		set group, id, file(sv) from annotsv_vcf
 		
@@ -1372,6 +1381,9 @@ process vep_sv {
 	container = '/fs1/resources/containers/ensembl-vep_latest.sif'
 	tag "$group"
 	
+	when:
+		params.annotate
+
 	input:
 		set group, id, file(vcf) from vcf_vep
 
