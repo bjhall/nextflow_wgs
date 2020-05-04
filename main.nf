@@ -854,6 +854,9 @@ process extract_indels_for_cadd {
 	cpus 1
 	tag "$group"
 
+	when:
+		params.annotate
+
 	input:
 		set group, file(vcf) from split_cadd
 	
@@ -1014,11 +1017,10 @@ process fastgnomad {
 	cpus 2
 	memory '16 GB'
 	tag "$group"
-	
+	publishDir "${OUTDIR}/vcf", mode: 'copy', overwrite: 'true'
+
 	when:
 		params.annotate
-
-	publishDir "${OUTDIR}/vcf", mode: 'copy', overwrite: 'true'
 
 	input:
 		set group, file(vcf) from vcf_gnomad
