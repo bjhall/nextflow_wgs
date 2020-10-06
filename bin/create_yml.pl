@@ -59,8 +59,8 @@ close INFO;
 ####################################################
 
 ## Rankmodel version
-my $rankm = "5.0";
-my $svrankm = "5.0";
+my $rankm = "5.01";
+my $svrankm = "5.1";
 if ($assay eq 'oncov1-0' ) { $rankm = "SNV-RM-v5.0"; $svrankm = "SV-Panel-RM-v1.0"; }
 
 my $kit = "Intersected WGS";
@@ -85,6 +85,7 @@ if ($opt{assay}) {
     elsif ($assay eq 'oncov1-0' && $analysis eq 'predictive' ) { $institute = "oncogen"; $institute_owner = "onkogenetik"; }
     elsif ($assay eq 'oncov1-0' ) { $institute = "oncogen"; $institute_owner = "onkogenetik"; }
     elsif ($assay eq 'wgs-hg38' ) { $institute = "klingen_38"; $institute_owner = "klingen_38";}
+    elsif ($assay eq 'wgs-hg38-valid' ) { $institute = "klingen-genlista"; $institute_owner = "klingen-genlista";}
 }
 ### ASSAY DECIDE OWNER? ####
 print OUT "owner: $institute_owner\n";
