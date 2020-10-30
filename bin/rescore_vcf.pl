@@ -44,9 +44,13 @@ $rankresult_meta =~ s/\|/:/g;
 
 
 while ( my $a = $vcf->next_var() ) {
-	my $vcfedited = vcfstr($a, \@sample_order);
-
-	print $vcfedited;
+	my ($vcfedited,$ok) = vcfstr($a, \@sample_order);
+	if ($ok) {
+		print $vcfedited;
+	}
+	else {
+		next;
+	}
 
 }
 
@@ -123,13 +127,29 @@ sub vcfstr {
 		}
 	}
 	# Print GT fields for all samples
+	my $onevariantplease = 0;
 	for my $gt ( sort {$order{$a->{_sample_id}} <=> $order{$b->{_sample_id}}} @GTS) {
 		my @all_gt;
+		
 		for my $key ( @{$v->{FORMAT}} ) {
-			push @all_gt, ( defined $gt->{$key} ? $gt->{$key} : "");
+			## scout wont load GT-fields = "." Need to set dummy-value
+			if ($key eq 'GT') {
+				if ($gt->{$key} =~ /(0\/1|\.\/1|1\/1)/) {
+					$onevariantplease = 1;
+				}
+			}
+
+			if ($gt->{$key} eq '.') {
+				push @all_gt,"0,0";
+			}
+			else {
+				push @all_gt, ( defined $gt->{$key} ? $gt->{$key} : "");
+			}
+			#push @all_gt, ( defined $gt->{$key} ? $gt->{$key} : "");
+
 		}
 		$tot_str = $tot_str.join(":", @all_gt)."\t";
 	}
 	$tot_str = $tot_str."\n";
-	return $tot_str;
+	return $tot_str,$onevariantplease;
 }
