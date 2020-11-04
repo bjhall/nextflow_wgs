@@ -6,13 +6,22 @@ Channel
 	.map{ row-> tuple(row.group, file(row.sv_vcf), file(row.snv_vcf) ) }
 	.into{ input; madde_group; vcf_peddy; yaml_input }
 
+csv = file(params.csv)
+base = csv.getParent()
+name = csv.getSimpleName()
+ped_file = base/name+'.ped'
+ped = file( ped_file )
+
+
+
 Channel
-    .fromPath(file(params.ped))
+    .fromPath(file(ped))
     .into{ strip_ped; ped_compound; ped_inher; ped_mad; ped_peddy; ped_scout }
 
 OUTDIR = params.outdir+'/'+params.subdir
+CRONDIR = params.crondir
 
-ped = file(params.ped)
+
 mode = ped.countLines() > 1 ? "family" : "single"
 println(mode)
 
@@ -240,8 +249,8 @@ snv_INFO
 
 process create_yaml {
 	queue 'bigmem'
-	//publishDir "${OUTDIR}/yaml", mode: 'copy' , overwrite: 'true'
-	//publishDir "${CRONDIR}/scout", mode: 'copy' , overwrite: 'true'
+	publishDir "${OUTDIR}/yaml", mode: 'copy' , overwrite: 'true'
+	publishDir "${CRONDIR}/scout", mode: 'copy' , overwrite: 'true'
 	errorStrategy 'retry'
 	maxErrors 5
 	tag "$group"
