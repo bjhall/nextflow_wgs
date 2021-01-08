@@ -71,6 +71,7 @@ fastq_sharded = Channel.create()
 gvcf_choice = Channel.create()
 fastq_umi = Channel.create()
 
+
 // If input files are fastq -> normal path. Flags affecting; --shardbwa (sharded bwa) --align(req), --varcall(if variant calling is to be done) and --annotate(if --varcall)
 // bam -> skips align and is variant called (if --varcall is present) and annotated (if --annotate is present)
 // vcf skips align + varcall and is only annotated (if --annotate is present)
@@ -78,8 +79,32 @@ fastq_umi = Channel.create()
 // If .bam -> value 1, else if .vcf -> value 2 else if .gvcf -> value 4 else if none(.fq.gz) if params.shardbwa true -> value 3 otherwise 0
 input_files.view().choice(fastq, bam_choice, vcf_choice, fastq_sharded, gvcf_choice, fastq_umi) { it[2]  =~ /\.bam/ ? 1 : ( it[2] =~ /\.vcf/ ? 2 : ( it[2] =~ /\.gvcf/ ? 4 : (params.shardbwa ? 3 : (params.umi ? 5 : 0))))  }
 
-bam_choice
-	.into{ expansionhunter_bam_choice; dnascope_bam_choice; chanjo_bam_choice; yaml_bam_choice; cov_bam_choice; bam_manta_choice; bam_nator_choice; bam_tiddit_choice }
+bam_choice.into{
+	expansionhunter_bam_choice;
+	dnascope_bam_choice;
+	chanjo_bam_choice; 
+	yaml_bam_choice;
+	cov_bam_choice;
+	bam_manta_choice;
+	bam_nator_choice;
+	bam_tiddit_choice;
+	bam_freebayes_choice;
+	bam_mantapanel_choice;
+	bam_cnvkitpanel_choice;
+	bam_dellypanel_choice;
+	bam_melt_choice;
+	bam_qc_choice;
+	dedup_dummy_choice }
+
+process dedupdummy {
+	input:
+		set id, group, file(bam), file(bai) from dedup_dummy_choice
+	output:
+		set id, file("dummy") into dedup_dummy
+	"""
+	echo test > dummy
+	"""
+}
 
 // Input channels for various meta information //
 Channel
@@ -420,7 +445,7 @@ process sentieon_qc {
 	stageOutMode 'copy'
 
 	input:
-		set id, group, file(bam), file(bai), file(dedup) from qc_bam.join(merged_dedup_metrics)
+		set id, group, file(bam), file(bai), file(dedup) from qc_bam.mix(bam_qc_choice).join(merged_dedup_metrics.mix(dedup_dummy))
 
 	output:
 		set id, file("${id}.QC") into qc_cdm, qc_melt
@@ -433,7 +458,7 @@ process sentieon_qc {
 		assay = "wgs"
 		if( params.onco || params.exome) {
 			target = "--interval $params.intervals"
-			panel = params.panelhs + "${bam}" + params.panelhs2 
+			panel = params.panelhs + "${bam.toRealPath()}" + params.panelhs2 
 			cov = "CoverageMetrics --cov_thresh 1 --cov_thresh 10 --cov_thresh 30 --cov_thresh 100 --cov_thresh 250 --cov_thresh 500 cov_metrics.txt"
 			assay = "panel"
 		}
@@ -442,7 +467,7 @@ process sentieon_qc {
 	sentieon driver \\
 		-r $genome_file $target \\
 		-t ${task.cpus} \\
-		-i ${bam} \\
+		-i ${bam.toRealPath()} \\
 		--algo MeanQualityByCycle mq_metrics.txt \\
 		--algo QualDistribution qd_metrics.txt \\
 		--algo GCBias --summary gc_summary.txt gc_metrics.txt \\
@@ -655,7 +680,7 @@ process melt {
 	stageOutMode 'copy'
 
 	input:
-		set id, group, file(bam), file(bai), val(INS_SIZE), val(MEAN_DEPTH), val(COV_DEV) from bam_melt.join(qc_melt_val)
+		set id, group, file(bam), file(bai), val(INS_SIZE), val(MEAN_DEPTH), val(COV_DEV) from bam_melt.mix(bam_melt_choice).join(qc_melt_val)
 
 	when:
 		params.onco
@@ -665,7 +690,7 @@ process melt {
 
 	"""
 	java -jar  /opt/MELT.jar Single \\
-		-bamfile $bam \\
+		-bamfile ${bam.toRealPath()} \\
 		-r 150 \\
 		-h $genome_file \\
 		-n $params.bed_melt \\
@@ -887,7 +912,7 @@ process freebayes {
 	stageOutMode 'copy'
 
     input:
-        set group, id, file(bam), file(bai) from bam_freebayes
+        set group, id, file(bam), file(bai) from bam_freebayes.mix(bam_freebayes_choice)
 
     output:
         set id, file("${id}.pathfreebayes.lines") into freebayes_concat
@@ -895,7 +920,7 @@ process freebayes {
 	script:
 		if (params.onco) {
 			"""
-			freebayes -f $genome_file --pooled-continuous --pooled-discrete -t $params.intersect_bed --min-repeat-entropy 1 -F 0.03 $bam > ${id}.freebayes.vcf
+			freebayes -f $genome_file --pooled-continuous --pooled-discrete -t $params.intersect_bed --min-repeat-entropy 1 -F 0.03 ${bam.toRealPath()} > ${id}.freebayes.vcf
 			vcfbreakmulti ${id}.freebayes.vcf > ${id}.freebayes.multibreak.vcf
 			bcftools norm -m-both -c w -O v -f $genome_file -o ${id}.freebayes.multibreak.norm.vcf ${id}.freebayes.multibreak.vcf
 			vcfanno_linux64 -lua /fs1/resources/ref/hg19/bed/scout/sv_tracks/silly.lua $params.vcfanno ${id}.freebayes.multibreak.norm.vcf > ${id}.freebayes.multibreak.norm.anno.vcf
@@ -1516,7 +1541,7 @@ process manta_panel {
 		params.sv && params.onco
 
 	input:
-		set group, id, file(bam), file(bai) from bam_manta_panel
+		set group, id, file(bam), file(bai) from bam_manta_panel.mix(bam_mantapanel_choice)
 
 	output:
 		set group, id, file("${id}.manta.vcf.gz") into called_manta_panel
@@ -1544,7 +1569,7 @@ process delly_panel {
 		params.sv && params.onco
 
 	input:
-		set group, id, file(bam), file(bai) from bam_delly_panel
+		set group, id, file(bam), file(bai) from bam_delly_panel.mix(bam_dellypanel_choice)
 
 	output:
 		set group, id, file("${id}.delly.vcf.gz") into called_delly_panel
@@ -1573,7 +1598,7 @@ process cnvkit_panel {
 		params.sv && params.onco
 
 	input:
-		set group, id, file(bam), file(bai) from bam_cnvkit_panel
+		set group, id, file(bam), file(bai) from bam_cnvkit_panel.mix(bam_cnvkitpanel_choice)
 		set id, val(INS_SIZE), val(MEAN_DEPTH), val(COV_DEV) from qc_cnvkit_val
 		set group, file(vcf) from vcf_cnvkit
 	
@@ -1584,7 +1609,7 @@ process cnvkit_panel {
 	cnvkit.py batch ${bam.toRealPath()} -r $params.cnvkit_reference -p 5 -d results/
 	cnvkit.py call results/*.cns -v $vcf -o ${id}.call.cns
 	filter_cnvkit.pl ${id}.call.cns $MEAN_DEPTH > ${id}.filtered
-	cnvkit.py export vcf ${id}.filtered > ${id}.cnvkit_filtered.vcf
+	cnvkit.py export vcf ${id}.filtered -i "$id" > ${id}.cnvkit_filtered.vcf
 	"""
 
 }
@@ -1596,9 +1621,9 @@ process svdb_merge_panel {
 	publishDir "${OUTDIR}/sv_vcf/merged/", mode: 'copy', overwrite: 'true'
 	time '10m'
 	memory '1 GB'
-	scratch true
-	stageInMode 'copy'
-	stageOutMode 'copy'
+	// scratch true
+	// stageInMode 'copy'
+	// stageOutMode 'copy'
 
 	input:
 		set group, id, file(mantaV) from called_manta_panel.groupTuple()
